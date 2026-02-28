@@ -1,6 +1,6 @@
 {
   "name": "lnTime",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Custom lnTime and timeSched library for ESP32 projects.",
   "keywords": [
     "time",
