@@ -1,0 +1,98 @@
+//
+// updated by ...: Loreto Notarantonio
+// Date .........: 30-08-2025 10.58.13
+//
+
+void lnTimeSched::updateTime() {
+    time_t now = time(nullptr);
+    localtime_r(&now, &m_tm);
+}
+
+
+bool lnTimeSched::onSecond() {
+    updateTime();
+
+    if (m_tm.tm_sec != m_lastSecond) {
+        m_lastSecond = m_tm.tm_sec;
+        return true;
+    }
+    return false;
+}
+
+
+bool lnTimeSched::onMinute() {
+    updateTime();
+
+    if (m_tm.tm_min != m_lastMinute && m_tm.tm_sec == 0) {
+        m_lastMinute = m_tm.tm_min;
+        return true;
+    }
+    return false;
+}
+
+
+bool lnTimeSched::onHour() {
+    updateTime();
+
+    if (m_tm.tm_hour != m_lastHour &&
+        m_tm.tm_min == 0 &&
+        m_tm.tm_sec == 0) {
+
+        m_lastHour = m_tm.tm_hour;
+        return true;
+    }
+    return false;
+}
+
+
+bool lnTimeSched::onModulo(uint64_t sec) {
+    updateTime();
+
+    uint64_t totalSec =
+          m_tm.tm_hour * 3600ULL +
+          m_tm.tm_min  * 60ULL +
+          m_tm.tm_sec;
+
+    if ((totalSec % sec) == 0 && totalSec != m_lastModulo) {
+        m_lastModulo = totalSec;
+        return true;
+    }
+
+    return false;
+}
+
+
+bool lnTimeSched::onModuloHMS(uint8_t H, uint8_t M, uint8_t S) {
+    uint64_t sec = H*3600ULL + M*60ULL + S;
+    return onModulo(sec);
+}
+
+bool lnTimeSched::at_HMS(uint8_t H, uint8_t M, uint8_t S) {
+    updateTime();
+
+    if (m_tm.tm_hour == H &&
+        m_tm.tm_min  == M &&
+        m_tm.tm_sec  == S) {
+
+        if (m_lastSecond != m_tm.tm_sec) {
+            m_lastSecond = m_tm.tm_sec;
+            return true;
+        }
+    }
+    return false;
+}
+
+
+lnTimeSched::lnTimeSched(lnTimeClock* clock)
+{
+    m_clock = clock;
+}
+
+void lnTimeSched::updateTime()
+{
+    if (!m_clock->isTimeValid())
+        return;
+
+    time_t now = m_clock->now();
+    localtime_r(&now, &m_tm);
+}
