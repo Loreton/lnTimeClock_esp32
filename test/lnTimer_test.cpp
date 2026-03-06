@@ -8,20 +8,18 @@
 // #define LOG_MODULE_LEVEL LOG_MODULE_INFO
 #define  __I_AM_MAIN_CPP__
 #include "WiFiManager.h"
+#include "lnTimeClock.h"
 #include "lnLogger_Class.h"
 
-// --- wifi CREDENTIALS
-#include <esp32_ssid_credentials.h>
 
 
-#include "lnTimeClock.h"
-#include "lnTimeScheduler.h"
 WiFiManagerNB wifiManager;
 lnTimeClock  ln_clock;
-lnTimeScheduler scheduler(&ln_clock);
 
 
 void wifiInit() {
+    // --- wifi CREDENTIALS
+    #include <ssid_credentials_esp32.h>
     // - prima dell'init()
     for (int8_t i = 0; i < loretoNetworksCount; i++) {
         wifiManager.addSSID(loretoNetworks[i].ssid, loretoNetworks[i].password);
@@ -52,15 +50,21 @@ void setup() {
     // supponiamo WiFi già gestito altrove
     ln_clock.begin();
 
-    scheduler.onMinute(onMinuteCB);
-    scheduler.at(12,0,0,onNoon);
-    scheduler.everySeconds(10, [](){ // senza callback
-        lnLOG_INFO("Ogni 10 secondi");
-    });
 }
 
 void loop() {
     ln_clock.update();
-    scheduler.update();
     wifiManager.update();
+    struct tm t;
+    ln_clock.getLocalTime(t);
+    lnLOG_INFO("t: %d", t.tm_sec);
+
+    char buff[16];
+    ln_clock.getNow(buff, sizeof(buff));
+    lnLOG_INFO("time: %s", buff);
+
+    char buff2[16];
+    ln_clock.msecToHMS(buff2, sizeof(buff2), millis(), true, false);
+    lnLOG_INFO("msetToHMS: %s", buff2);
+
 }

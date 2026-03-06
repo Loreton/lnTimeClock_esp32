@@ -21,6 +21,7 @@ class lnTimeClock {
         const unsigned long m_syncInterval = 4UL * 60UL * 60UL * 1000UL; // 4 ore
 
         void startNTP();
+        time_t _now();
 
     public:
         void begin(const char* ntpServer = "pool.ntp.org");
@@ -28,6 +29,7 @@ class lnTimeClock {
 
         bool isTimeValid() const { return m_timeValid; }
 
-        time_t now();
         void getLocalTime(struct tm &info);
+        void getNow(char* buffer, size_t buf_len);
+        const char* msecToHMS(char *buffer, uint8_t buffer_len, uint32_t millisec, bool addMilliSec=false, bool stripHeader=false);
 };
