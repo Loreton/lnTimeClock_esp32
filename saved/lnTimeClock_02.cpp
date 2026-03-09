@@ -16,20 +16,11 @@
 #include "lnTimeClock.h"
 #include <lnLogger_Class.h>
 
-// Status sync come stringhe per il log
-#define EUROPE_ROME_TZ "CET-1CEST,M3.5.0,M10.5.0/3" // https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
-const char* sntp_status_names[] = {"RESET", "COMPLETED", "IN_PROGRESS"};
-volatile uint8_t g_ntpSyncStatus = 0; // devo far uso di una variabile globale per catturare lo status di cbSyncTime()
 
-
-void lnTimeClock::sntpCallback(struct timeval *tv) {
-    g_ntpSyncStatus = sntp_get_sync_status();
-    lnLOG_NOTIFY("NTP time synched: %d [%s]", g_ntpSyncStatus, sntp_status_names[g_ntpSyncStatus]);
-}
 
 void lnTimeClock::begin() {
-    // Imposta il fuso orario Italiano (Roma)
-    setenv("TZ", EUROPE_ROME_TZ, 1);
+    // Italia: CET (1h) / CEST (2h, da Marzo a Ottobre)
+    setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
     tzset();
 }
 
@@ -46,11 +37,8 @@ bool lnTimeClock::isTimeValid() const {
 void lnTimeClock::startNTP() {
     if (WiFi.status() != WL_CONNECTED) return;
 
-    lnLOG_INFO("Initializing NTP connection...");
-    sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
-    sntp_set_time_sync_notification_cb(lnTimeClock::sntpCallback);
-
-    // Configurazione nativa: gestisce fino a 3 server
+    lnLOG_INFO("Initializing SNTP...");
+    sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED);
     configTime(0, 0, m_ntpServer1, m_ntpServer2);
 
     m_ntpActive = true;
@@ -67,10 +55,7 @@ void lnTimeClock::stopNTP() {
 
 void lnTimeClock::update() {
     if (WiFi.status() != WL_CONNECTED) {
-        if (m_ntpActive) {
-	       stopNTP();
-	       lnLOG_WARNING("WiFi lost: SNTP stopping...");
-	    }
+        if (m_ntpActive) stopNTP();
         return;
     }
 
@@ -107,14 +92,14 @@ const char* lnTimeClock::getSyncStatusStr() const {
 }
 
 void lnTimeClock::getLocalTime(struct tm &info) {
-    time_t now = time(nullptr);
-    localtime_r(&now, &info);
+    time_t t = time(nullptr);
+    localtime_r(&t, &info);
 }
 
 void lnTimeClock::getNow(char* buffer, size_t buf_len) {
-    struct tm timeinfo;
-    getLocalTime(timeinfo);
-    strftime(buffer, buf_len, "%H:%M:%S", &timeinfo);
+    struct tm ti;
+    getLocalTime(ti);
+    strftime(buffer, buf_len, "%H:%M:%S", &ti);
 }
 
 

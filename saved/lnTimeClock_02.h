@@ -23,7 +23,6 @@ class lnTimeClock {
 
         void startNTP();
         void stopNTP();
-        static void sntpCallback(struct timeval *tv);
 
     public:
         void begin();

@@ -33,16 +33,6 @@ void lnTimeClock::begin() {
     tzset();
 }
 
-
-bool lnTimeClock::isTimeValid() const {
-    time_t now;
-    struct tm timeinfo;
-    time(&now);
-    localtime_r(&now, &timeinfo);
-    // tm_year sono gli anni dal 1900. 120 = anno 2020.
-    return (timeinfo.tm_year > 120);
-}
-
 void lnTimeClock::startNTP() {
     if (WiFi.status() != WL_CONNECTED) return;
 
@@ -54,23 +44,18 @@ void lnTimeClock::startNTP() {
     configTime(0, 0, m_ntpServer1, m_ntpServer2);
 
     m_ntpActive = true;
-    m_lastNtpStart = millis();
-}
-
-void lnTimeClock::stopNTP() {
-    if (m_ntpActive) {
-        sntp_stop();
-        m_ntpActive = false;
-        lnLOG_WARNING("SNTP stopped.");
-    }
+    m_lastAttempt = millis();
 }
 
 void lnTimeClock::update() {
+    // Gestione connettività
     if (WiFi.status() != WL_CONNECTED) {
         if (m_ntpActive) {
-	       stopNTP();
-	       lnLOG_WARNING("WiFi lost: SNTP stopping...");
-	    }
+            sntp_stop();
+            m_ntpActive = false;
+            m_timeValid = false;
+            lnLOG_WARNING("WiFi lost: SNTP stopped");
+        }
         return;
     }
 
@@ -79,31 +64,24 @@ void lnTimeClock::update() {
         return;
     }
 
-    uint32_t now = millis();
-    bool valid = isTimeValid();
+    // Monitoraggio stato tramite API ESP-IDF
+    sntp_sync_status_t status = sntp_get_sync_status();
 
-    // Gestione refresh e tentativi
-    if (valid) {
-        // Se il tempo è valido, facciamo un refresh solo ogni ora
-        if (now - m_lastNtpStart > m_syncInterval) {
-            lnLOG_INFO("Scheduled NTP refresh...");
-            startNTP();
-        }
-    } else {
-        // Se il tempo NON è valido e siamo in attesa da troppo (es. 60s)
-        if (now - m_lastNtpStart > m_retryTimeout) {
-            lnLOG_ERROR("NTP sync failed to validate time. Retrying...");
-            stopNTP(); // Forza il riavvio al prossimo ciclo
+    if (status != m_lastSyncStatus) {
+        lnLOG_INFO("SNTP Status changed: %s", sntp_status_names[status]);
+        m_lastSyncStatus = status;
+
+        if (status == SNTP_SYNC_STATUS_COMPLETED) {
+            m_timeValid = true;
+            m_lastAttempt = millis(); // Reset timer per il prossimo intervallo
         }
     }
-}
 
-const char* lnTimeClock::getSyncStatusStr() const {
-    if (isTimeValid()) return "TIME_OK";
-
-    sntp_sync_status_t s = sntp_get_sync_status();
-    if (s == SNTP_SYNC_STATUS_IN_PROGRESS) return "SYNCING...";
-    return "WAITING_VALID_TIME";
+    // Re-sync periodico o gestione fallimento iniziale (dopo 30s)
+    if (millis() - m_lastAttempt > m_syncInterval || (!m_timeValid && millis() - m_lastAttempt > 30000)) {
+        lnLOG_INFO("Refreshing NTP sync...");
+        startNTP();
+    }
 }
 
 void lnTimeClock::getLocalTime(struct tm &info) {
@@ -117,6 +95,30 @@ void lnTimeClock::getNow(char* buffer, size_t buf_len) {
     strftime(buffer, buf_len, "%H:%M:%S", &timeinfo);
 }
 
+
+
+bool lnTimeClock::isSynced() {
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+
+    // Se l'anno è maggiore del 1970 (tm_year è anni dal 1900),
+    // significa che NTP ha risposto almeno una volta con successo.
+    return (timeinfo.tm_year > 70);
+}
+
+const char* lnTimeClock::getSyncStatus() {
+    if (isSynced()) {
+        return "SYNCED (Time Valid)";
+    }
+
+    switch (sntp_get_sync_status()) {
+        case SNTP_SYNC_STATUS_IN_PROGRESS: return "SYNCING...";
+        case SNTP_SYNC_STATUS_RESET:       return "IDLE (Time Not Set)";
+        default:                           return "UNKNOWN";
+    }
+}
 
 
 // ################################################################
