@@ -13,6 +13,7 @@
 
 
 // Variabili di stato
+#define BUTTON_PIN 19
 bool canUseNetwork = false;
 uint32_t lastRetryTime = 0;
 const uint32_t retryInterval = 30000; // 30 secondi tra i tentativi di scansione se disconnesso
@@ -63,6 +64,10 @@ void onNoon() {
 void setup() {
     Serial.begin(115200);
     lnLog.init(128, 25);  // line_buffer_len, filename_buffer_len
+
+    // Configura il PIN di test
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
+
     wifiInit();
 
     // supponiamo WiFi già gestito altrove
@@ -110,12 +115,28 @@ void refreshTime() {
 void loop() {
     refreshTime();
 
-    // Aggiorna lo stato del WiFi (gestisce i risultati dello scan)
+    // 1. Aggiorna lo stato del WiFi
     wifiManager.update();
+
+    // 2. Ottieni lo stato una volta sola (più efficiente)
+    bool isNetReady = wifiManager.isConnected();
+
+    // 3. Distribuisci lo stato ai moduli
+    ln_clock.update(isNetReady);
+
+    // --- TEST DISCONNESSIONE MANUALE ---
+    // Se premi il pulsante (o colleghi il PIN 19 a GND)
+    if (digitalRead(BUTTON_PIN) == LOW && isNetReady) {
+        if (wifiManager.isConnected()) {
+            wifiManager.disconnect();
+            delay(500); // Debounce brutale per il test
+        }
+    }
+
 
     // --- LOGICA DEI SERVIZI ---
     if (canUseNetwork) {
-        ln_clock.update();
+        ln_clock.update(isNetReady);
 
         // Esegui Telegram solo se la rete è pronta
         // myTelegramBot.handleMessages();

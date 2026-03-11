@@ -27,8 +27,8 @@ class lnTimeClock {
 
     public:
         void begin();
-        void update();
-
+        // void update();
+        void update(bool isNetworkAvailable); // Accetta lo stato della rete
         // Ritorna true se l'anno è > 2020 (indica che NTP ha funzionato almeno una volta)
         bool isTimeValid() const;
 

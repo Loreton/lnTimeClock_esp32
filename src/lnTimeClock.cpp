@@ -1,10 +1,9 @@
 //
 // updated by ...: Loreto Notarantonio
-// Date .........: 30-08-2025 10.58.13
+// Date .........: 11-03-2026 17.06.48
 //
 
 /*
-
     Cosa fa ora questa classe
     ✔ Avvia NTP solo quando WiFi è connesso
     ✔ Si ri-sincronizza ogni 12 ore
@@ -43,28 +42,50 @@ bool lnTimeClock::isTimeValid() const {
     return (timeinfo.tm_year > 120);
 }
 
-void lnTimeClock::startNTP() {
-    if (WiFi.status() != WL_CONNECTED) return;
+// void lnTimeClock::startNTP() {
+//     if (WiFi.status() != WL_CONNECTED) return;
 
+//     lnLOG_INFO("Initializing NTP connection...");
+//     sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
+//     sntp_set_time_sync_notification_cb(lnTimeClock::sntpCallback);
+
+//     // Configurazione nativa: gestisce fino a 3 server
+//     configTime(0, 0, m_ntpServer1, m_ntpServer2);
+
+//     m_ntpActive = true;
+//     m_lastNtpStart = millis();
+// }
+
+void lnTimeClock::startNTP() {
+    // Non controlliamo più il WiFi qui, ci fidiamo di chi ci chiama
     lnLOG_INFO("Initializing NTP connection...");
     sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
     sntp_set_time_sync_notification_cb(lnTimeClock::sntpCallback);
 
-    // Configurazione nativa: gestisce fino a 3 server
     configTime(0, 0, m_ntpServer1, m_ntpServer2);
-
     m_ntpActive = true;
     m_lastNtpStart = millis();
 }
+
+
+
+
+// void lnTimeClock::stopNTP() {
+//     if (m_ntpActive) {
+//         sntp_stop();
+//         m_ntpActive = false;
+//         lnLOG_WARNING("SNTP stopped.");
+//     }
+// }
 
 void lnTimeClock::stopNTP() {
     if (m_ntpActive) {
         sntp_stop();
         m_ntpActive = false;
-        lnLOG_WARNING("SNTP stopped.");
+        lnLOG_WARNING("SNTP stopped (Network unavailable or forced).");
     }
 }
-
+/*
 void lnTimeClock::update() {
     if (WiFi.status() != WL_CONNECTED) {
         if (m_ntpActive) {
@@ -96,7 +117,44 @@ void lnTimeClock::update() {
             stopNTP(); // Forza il riavvio al prossimo ciclo
         }
     }
+}*/
+
+
+void lnTimeClock::update(bool isNetworkAvailable) {
+    // 1. GESTIONE CADUTA RETE
+    if (!isNetworkAvailable) {
+        if (m_ntpActive) {
+            stopNTP(); // Mettiamo in pausa NTP se la rete sparisce
+        }
+        return; // Non facciamo altro finché non torna la rete
+    }
+
+    // 2. RETE DISPONIBILE: Se non siamo attivi, partiamo
+    if (!m_ntpActive) {
+        startNTP();
+        return;
+    }
+
+    // 3. LOGICA DI REFRESH (Rete presente e NTP attivo)
+    uint32_t now = millis();
+    bool valid = isTimeValid();
+
+    if (valid) {
+        // Refresh programmato (es. ogni 12 o 24 ore)
+        if (now - m_lastNtpStart > m_syncInterval) {
+            lnLOG_INFO("Scheduled NTP refresh...");
+            startNTP();
+        }
+    } else {
+        // Se non è ancora valido dopo il timeout (es. DNS fallito o server down)
+        if (now - m_lastNtpStart > m_retryTimeout) {
+            lnLOG_ERROR("NTP sync timeout. Retrying...");
+            stopNTP(); // Reset per riprovare al prossimo update
+        }
+    }
 }
+
+
 
 const char* lnTimeClock::getSyncStatusStr() const {
     if (isTimeValid()) return "TIME_OK";
