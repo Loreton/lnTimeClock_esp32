@@ -16,7 +16,17 @@
 #include <lnLogger_Class.h>
 
 // Status sync come stringhe per il log
-#define EUROPE_ROME_TZ "CET-1CEST,M3.5.0,M10.5.0/3" // https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
+// #define EUROPE_ROME_TZ "CET-1CEST,M3.5.0,M10.5.0/3"
+// #define EUROPE_ROME_TZ "CET-1CEST,M3.5.0/2,M10.5.0/3" // https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
+#define EUROPE_ROME_TZ "CET-1CEST-2,M3.5.0/2,M10.5.0/3" // più robista
+/* -----------------
+    Spiegazione:
+        CET-1        UTC+1
+        CEST         daylight timezone
+        CEST-2       UTC+2
+        M3.5.0/2     ultima domenica di marzo ore 02
+        M10.5.0/3    ultima domenica di ottobre ore 03
+------------------ */
 const char* sntp_status_names[] = {"RESET", "COMPLETED", "IN_PROGRESS"};
 volatile uint8_t g_ntpSyncStatus = 0; // devo far uso di una variabile globale per catturare lo status di cbSyncTime()
 
