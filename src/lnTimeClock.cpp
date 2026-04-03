@@ -18,7 +18,10 @@
 // Status sync come stringhe per il log
 // #define EUROPE_ROME_TZ "CET-1CEST,M3.5.0,M10.5.0/3"
 // #define EUROPE_ROME_TZ "CET-1CEST,M3.5.0/2,M10.5.0/3" // https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
-#define EUROPE_ROME_TZ "CET-1CEST-2,M3.5.0/2,M10.5.0/3" // più robista
+// #define EUROPE_ROME_TZ "CET-1CEST-2,M3.5.0/2,M10.5.0/3"
+// Stringa corretta per l'Italia (Roma)
+#define EUROPE_ROME_TZ "CET-1CEST,M3.5.0,M10.5.0/3"
+
 /* -----------------
     Spiegazione:
         CET-1        UTC+1
@@ -31,16 +34,34 @@ const char* sntp_status_names[] = {"RESET", "COMPLETED", "IN_PROGRESS"};
 volatile uint8_t g_ntpSyncStatus = 0; // devo far uso di una variabile globale per catturare lo status di cbSyncTime()
 
 
+
 void lnTimeClock::sntpCallback(struct timeval *tv) {
-    g_ntpSyncStatus = sntp_get_sync_status();
-    lnLOG_NOTIFY("NTP time synched: %d [%s]", g_ntpSyncStatus, sntp_status_names[g_ntpSyncStatus]);
+    time_t now = tv->tv_sec;
+    struct tm timeinfo;
+    localtime_r(&now, &timeinfo);
+
+    char timeString[32];
+    strftime(timeString, sizeof(timeString), "%d/%m/%Y %H:%M:%S", &timeinfo);
+
+    lnLOG_SUCCESS("NTP: Time synchronized!");
+    lnLOG_INFO("NTP: Local Time: %s (%s)",
+                timeString,
+                timeinfo.tm_isdst > 0 ? "Ora Legale/CEST" : "Ora Solare/CET");
 }
+// void lnTimeClock::sntpCallback(struct timeval *tv) {
+//     g_ntpSyncStatus = sntp_get_sync_status();
+//     lnLOG_NOTIFY("NTP time synched: %d [%s]", g_ntpSyncStatus, sntp_status_names[g_ntpSyncStatus]);
+// }
 
 void lnTimeClock::begin() {
-    // Imposta il fuso orario Italiano (Roma)
+    // Impostiamo il fuso orario subito. Anche senza NTP,
+    // localtime_r userà questo offset per i log basati su tempo relativo.
     setenv("TZ", EUROPE_ROME_TZ, 1);
     tzset();
+    lnLOG_DEBUG("TimeClock: Environment TZ set to Italy.");
 }
+
+
 
 
 bool lnTimeClock::isTimeValid() const {
@@ -52,41 +73,24 @@ bool lnTimeClock::isTimeValid() const {
     return (timeinfo.tm_year > 120);
 }
 
-// void lnTimeClock::startNTP() {
-//     if (WiFi.status() != WL_CONNECTED) return;
 
-//     lnLOG_INFO("Initializing NTP connection...");
-//     sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
-//     sntp_set_time_sync_notification_cb(lnTimeClock::sntpCallback);
-
-//     // Configurazione nativa: gestisce fino a 3 server
-//     configTime(0, 0, m_ntpServer1, m_ntpServer2);
-
-//     m_ntpActive = true;
-//     m_lastNtpStart = millis();
-// }
 
 void lnTimeClock::startNTP() {
-    // Non controlliamo più il WiFi qui, ci fidiamo di chi ci chiama
     lnLOG_INFO("Initializing NTP connection...");
+
     sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
     sntp_set_time_sync_notification_cb(lnTimeClock::sntpCallback);
 
-    configTime(0, 0, m_ntpServer1, m_ntpServer2);
+    // configTzTime fa tre cose:
+    // 1. Imposta i server NTP
+    // 2. Applica la stringa TZ al sistema
+    // 3. Avvia il demone SNTP in background
+    configTzTime(EUROPE_ROME_TZ, "pool.ntp.org", "time.nist.gov");
+
     m_ntpActive = true;
     m_lastNtpStart = millis();
 }
 
-
-
-
-// void lnTimeClock::stopNTP() {
-//     if (m_ntpActive) {
-//         sntp_stop();
-//         m_ntpActive = false;
-//         lnLOG_WARNING("SNTP stopped.");
-//     }
-// }
 
 void lnTimeClock::stopNTP() {
     if (m_ntpActive) {
